@@ -16,8 +16,12 @@ def imgs_show(imgs, rows):
     plt.tight_layout(pad = 0.2)
 
 @singledispatch
-def img_withbox(img_file: str, boxes: Union[List[NamedBoundedBox], List[List[int]]], names = None):
-    if not isinstance(boxes[0], NamedBoundedBox):
+def img_withbox(img_file: str, 
+                boxes: Union[List[NamedBoundedBox] , List[List[int]]]= None,
+                names = None):
+    if boxes is None:
+        boxes = []
+    if len(boxes)>0 and not isinstance(boxes[0], NamedBoundedBox):
         if names is None:
             names = [""] * len(boxes)
         boxes = [NamedBoundedBox(name , BoundedBox(*b)) for name, b in zip(names,boxes)]
