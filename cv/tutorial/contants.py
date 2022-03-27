@@ -1,0 +1,1 @@
+VOC_TRAIN_DIR = "/home/wushan/Desktop/data/VOC2012/train/"

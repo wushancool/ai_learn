@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 import math
-from voc import NamedBoundedBox
+from voc import NamedBoundedBox, BoundedBox
 from matplotlib import patches
 from PIL import Image
-from typing import List
+from typing import List, Optional, Union
+from functools import singledispatch
 
 def imgs_show(imgs, rows):
     cols = math.floor(len(imgs)/rows)
@@ -14,7 +15,12 @@ def imgs_show(imgs, rows):
         ax.imshow(im, interpolation="nearest")
     plt.tight_layout(pad = 0.2)
 
-def img_withbox(img_file: str, boxes: List[NamedBoundedBox]):
+@singledispatch
+def img_withbox(img_file: str, boxes: Union[List[NamedBoundedBox], List[List[int]]], names = None):
+    if not isinstance(boxes[0], NamedBoundedBox):
+        if names is None:
+            names = [""] * len(boxes)
+        boxes = [NamedBoundedBox(name , BoundedBox(*b)) for name, b in zip(names,boxes)]
     fig, ax = plt.subplots(1)
     image =Image.open(img_file)
     ax.imshow(image)
