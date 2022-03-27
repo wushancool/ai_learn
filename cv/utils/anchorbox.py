@@ -3,6 +3,12 @@ from typing import List
 from functools import singledispatch
 from cv.metrics.iou import iou
 
+def box_corner_to_center(boxes: torch.Tensor):
+    center_x_y = (boxes[:, :2] + boxes[:, 2:]) / 2
+    w_h = boxes[:, 2:] - boxes[:, :2]
+    return torch.cat((center_x_y, w_h), dim = -1)
+
+
 @singledispatch
 def multibox_prior(input_shape: List[int], 
                     sizes: List[float], 
@@ -38,8 +44,6 @@ def multibox_prior(input_shape: List[int],
 
     return w_h_pixels + shifts
     
-
-
 @multibox_prior.register
 def _(input: torch.Tensor,
                     sizes: List[float], 
@@ -56,6 +60,7 @@ def assign_anchor(anchors, ground_truth_boxes, iou_threshold=0.5):
     """
     scores = iou(anchors, ground_truth_boxes)
     anchor_labels = torch.full((len(anchors),), -1, device = anchors.device)
+    
     # 1. Every anchor will have its max iou score label.
     max_scores, indices = torch.max(scores, dim = 1)
     qualified = torch.nonzero(max_scores>= iou_threshold).squeeze(-1)
@@ -71,6 +76,17 @@ def assign_anchor(anchors, ground_truth_boxes, iou_threshold=0.5):
         anchor_labels[row] = col
 
         # discard row and col
-        scores[row], scores[col] = -1, -1
+        scores[row,:], scores[:,col] = -1, -1
     
     return anchor_labels
+
+
+def offset(anchors: torch.Tensor, assigned: torch.Tensor,
+            eps = 1e-6):
+    anchors = box_corner_to_center(anchors)
+    assigned = box_corner_to_center(assigned)
+
+    xy_offset = 10 * (assigned[:, :2] - anchors[:, :2])/ anchors[:, 2:]
+    wh_offset = 5 * torch.log(eps + assigned[:, 2:] / anchors[:, 2:])
+
+    return torch.cat((xy_offset, wh_offset), dim = 1)

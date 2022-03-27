@@ -29,9 +29,9 @@ def img_withbox(img_file: str, boxes: Union[List[NamedBoundedBox], List[List[int
     def add_patch(box,name, color):
         rectangle = patches.Rectangle((box.xmin, box.ymin), width=box.width,
                                        height=box.height, 
-                                       edgecolor=color,label="1",
-                                       fill = False,linewidth=1)
-        ax.text(box.xmin,box.ymin-3, s=name, color=color)
+                                       edgecolor=color,
+                                       fill = False,linewidth=1.5)
+        ax.text(box.xmin, box.ymin-8, s=name, color=color)
         ax.add_patch(rectangle)
         
     [add_patch(it.box, it.name, colors(i)) 

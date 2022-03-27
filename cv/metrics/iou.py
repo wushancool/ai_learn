@@ -50,6 +50,6 @@ def _(boxes1: torch.Tensor, boxes2: torch.Tensor):
     # Union area
     box_area = lambda b:(b[:,2] - b[:,0]) * (b[:,3] - b[:,1])
     area1, area2 = box_area(boxes1), box_area(boxes2)
-    union_area = area1[:,None] + area2 # Broadcasting
+    union_area = area1[:,None] + area2 - inter_areas # Broadcasting
 
     return inter_areas / union_area
