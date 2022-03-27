@@ -2,12 +2,18 @@ import torch
 from typing import List
 from functools import singledispatch
 from cv.metrics.iou import iou
+from cv.utils.nms import nms
 
 def box_corner_to_center(boxes: torch.Tensor):
     center_x_y = (boxes[:, :2] + boxes[:, 2:]) / 2
     w_h = boxes[:, 2:] - boxes[:, :2]
     return torch.cat((center_x_y, w_h), dim = -1)
 
+def center_to_box_corner(boxes: torch.Tensor):
+    left_top = boxes[:, :2] - boxes[:,2:] / 2
+    right_bottom = boxes[:, :2] + boxes[:, 2:] / 2
+
+    return torch.cat((left_top, right_bottom), dim = 1)
 
 @singledispatch
 def multibox_prior(input_shape: List[int], 
@@ -90,3 +96,13 @@ def offset(anchors: torch.Tensor, assigned: torch.Tensor,
     wh_offset = 5 * torch.log(eps + assigned[:, 2:] / anchors[:, 2:])
 
     return torch.cat((xy_offset, wh_offset), dim = 1)
+
+def offset_inverse(anchors: torch.Tensor, predicted_offset: torch.Tensor):
+    anchors = box_corner_to_center(anchors)
+    x_y = anchors[:,:2] + predicted_offset[:, :2] * anchors[:, 2:] * 0.1
+    w_h = torch.exp(predicted_offset[:, 2:] * 0.2 ) * anchors[:, 2:]
+    
+    center = torch.cat((x_y, w_h), dim = -1)
+
+    return center_to_box_corner(center)
+

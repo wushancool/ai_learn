@@ -1,7 +1,9 @@
 import numpy as np
 from cv.metrics.iou import iou
-from functools import partial
+from functools import partial, singledispatch
+import torch
 
+@singledispatch
 def nms(boxes: np.ndarray, score: np.ndarray, threshold:float):
     """
     NMS of single class.
@@ -24,7 +26,22 @@ def nms(boxes: np.ndarray, score: np.ndarray, threshold:float):
         # The `top1` will be removed because the IoU will be 1.
         # The iou function is a single item compare.
         iou_func = partial(iou, box2 = boxes[top1])
-        qualified = np.apply_along_axis(iou_func,1, boxes[candidates]) < threshold
+        qualified = np.apply_along_axis(iou_func,1, boxes[candidates]) <= threshold
         candidates = candidates[qualified]
 
     return selected
+
+@nms.register
+def _(boxes: torch.Tensor, score: torch.Tensor, threshold: float):
+    rank = score.argsort(dim = -1, descending = True)
+    
+    keep = []
+    while len(rank) > 0:
+        top1 = rank[0]
+        keep.append(top1)
+
+        iou_scores = iou(boxes[top1].unsqueeze(0), boxes[rank[1:]].reshape(-1,4)).reshape(-1)
+        qualified = torch.nonzero(iou_scores <= threshold).reshape(-1) 
+        rank = rank[qualified + 1]
+
+    return torch.tensor(keep, device = boxes.device)

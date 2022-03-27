@@ -24,17 +24,18 @@ def img_withbox(img_file: str, boxes: Union[List[NamedBoundedBox], List[List[int
     fig, ax = plt.subplots(1)
     image =Image.open(img_file)
     ax.imshow(image)
-    colors = plt.cm.get_cmap("hsv", 10)
+    colors = plt.cm.get_cmap("Set1", 10)
 
     def add_patch(box,name, color):
         rectangle = patches.Rectangle((box.xmin, box.ymin), width=box.width,
                                        height=box.height, 
                                        edgecolor=color,
                                        fill = False,linewidth=1.5)
-        ax.text(box.xmin, box.ymin-8, s=name, color=color)
+        ax.text(box.xmin, box.ymin-8, s=name, color="white", backgroundcolor=color, fontsize = 9)
         ax.add_patch(rectangle)
         
     [add_patch(it.box, it.name, colors(i)) 
                     for i, it in enumerate(boxes)]
     
     return image
+
