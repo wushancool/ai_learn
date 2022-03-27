@@ -1,6 +1,7 @@
 import torch
 from typing import List
 from functools import singledispatch
+from cv.metrics.iou import iou
 
 @singledispatch
 def multibox_prior(input_shape: List[int], 
@@ -45,3 +46,31 @@ def _(input: torch.Tensor,
                     ratios: List[float])->torch.Tensor:
     res = multibox_prior(input.shape[-2:], sizes, ratios)
     return res.to(input.device).unsqueeze(0)
+
+def assign_anchor(anchors, ground_truth_boxes, iou_threshold=0.5):
+    """ Assign a class to each anchor by criteria.
+    :param anchors: (M, 4).Candidates
+    :param ground_truth_boxes:(N,4). labels
+    :param iou_threshold:
+    :return: (M,)
+    """
+    scores = iou(anchors, ground_truth_boxes)
+    anchor_labels = torch.full((len(anchors),), -1, device = anchors.device)
+    # 1. Every anchor will have its max iou score label.
+    max_scores, indices = torch.max(scores, dim = 1)
+    qualified = torch.nonzero(max_scores>= iou_threshold).squeeze(-1)
+    anchor_labels[qualified] = indices[qualified]
+
+    # 2. Give every ground-truth one most likely anchor.
+    label_count = len(ground_truth_boxes)
+    for _ in range(label_count):
+        # Find max, (consider threshold? Rare to see in practice?)
+        max_index = scores.argmax()
+        col = max_index % label_count
+        row = torch.div(max_index , label_count, rounding_mode = "floor")
+        anchor_labels[row] = col
+
+        # discard row and col
+        scores[row], scores[col] = -1, -1
+    
+    return anchor_labels
