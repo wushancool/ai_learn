@@ -106,3 +106,78 @@ def offset_inverse(anchors: torch.Tensor, predicted_offset: torch.Tensor):
 
     return center_to_box_corner(center)
 
+def multibox_target(anchors, labels):
+    """Get the offset, anchor class mask and anchor class of anchors to each batch of labels.
+        Use class index 0 as background class index. Other class index add up 1.
+    :param anchors: (M, 4)
+    :param labels: (B, N, 5), each label (class, x1,y1,x2,y2)
+    :return: (offset(B, M, 4), class_mask(B, M, 4), class(B, M))
+    """
+    anchors = anchors.squeeze(0)
+    anchor_size = anchors.shape[0]
+    classes_batch, mask_batch, offsets_batch = [],[],[]
+
+    for i in range(labels.shape[0]):
+        label = labels[i] # (N, 5)
+        assigned = assign_anchor(anchors, label[:, 1:]) # (M,). Assigned label index, not class id.
+
+        anchor_indices = assigned>=0
+        label_indices = assigned[anchor_indices]
+        
+        # 1. classes
+        classes = torch.zeros((anchor_size,), device = anchors.device, dtype = torch.long) #(M, )
+        classes[anchor_indices] = label[label_indices, 0].long() + 1 # 0 is background
+
+        # 2. mask
+        mask = (assigned>=0).float().reshape(-1,1).repeat(1,4) # (M,4)
+
+        # 3. offset
+        label_boxes = torch.zeros((anchor_size,4), device = anchors.device)
+        label_boxes[anchor_indices] = label[label_indices, 1:]
+        offsets = offset(anchors, label_boxes) * mask #(M,4)
+
+        classes_batch.append(classes)
+        mask_batch.append(mask.reshape(-1))
+        offsets_batch.append(offsets.reshape(-1))
+
+    return [torch.stack(it) for it in (offsets_batch, mask_batch, classes_batch)]        
+    
+from cv.utils.nms import nms
+
+
+def multibox_detection(class_predicts: torch.Tensor, predicted_offset: torch.Tensor,
+                        anchors, nms_threshold=0.5, pos_threshold=.009999999):
+    """Get predicted result from class distribution and offset prediction.
+    :param class_predicts: (B, C, A)
+    :param predicted_offset: (B, A * 4)
+    :param anchors: (1, A, 4)
+    :param return: (B, A, 6(class, prob/confident, box))
+    """                    
+    batch_size = class_predicts.shape[0]
+    anchors = anchors.squeeze(0) # batch size = 1, All batches share one.
+
+    res = []
+    for i in range(batch_size):
+        # Get the predicts
+        class_prob = class_predicts[i][1:] # (C, A), discard background class, means every class id minus 1.
+        conf, class_idx = class_prob.T.max(dim = -1) # (A, )
+        predict_boxes = offset_inverse(anchors, predicted_offset[i].reshape(-1,4))
+        keep_idx = nms(predict_boxes, conf, nms_threshold) # (X, 4)
+
+        # Only preserve the keep indices, others means background.
+        keep_class_idx = class_idx[keep_idx]
+        class_idx[:] = -1
+        class_idx[keep_idx] = keep_class_idx
+
+        # Less than pos_threshold means background
+        class_idx[conf<pos_threshold] = -1
+        conf[conf<pos_threshold] = 1 - conf[conf<pos_threshold]
+
+        #TODO: Pull keep_idx up to head
+
+        predict = torch.cat((class_idx.reshape(-1, 1), conf.reshape(-1, 1), predict_boxes), dim = -1)
+        res.append(predict)
+    
+    return torch.stack(res)
+        
+
